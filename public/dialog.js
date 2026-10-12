@@ -1,0 +1,5 @@
+let exportUrl=null,exportBusy=false,exportToken=0;
+function closeExport(){exportToken++;document.getElementById('exportOverlay')?.remove();if(exportUrl){URL.revokeObjectURL(exportUrl);exportUrl=null;}exportBusy=false;}
+function exportShell(title){closeExport();const box=document.createElement('div');box.id='exportOverlay';box.className='export-overlay';box.setAttribute('role','dialog');box.setAttribute('aria-modal','true');box.setAttribute('aria-label',title);box.innerHTML=`<div class="export-dialog"><div class="export-toolbar"><h2>${esc(title)}</h2><button class="button" id="exportClose">닫기</button></div><div id="exportContent"></div></div>`;document.body.appendChild(box);$('#exportClose').onclick=closeExport;$('#exportClose').focus();return box;}
+function exportError(e){exportBusy=false;console.error('Report export failed',e);const node=document.getElementById('exportStatus');if(node)node.textContent='파일을 만들지 못했습니다. 다시 시도해 주세요. '+(e?.message||'');toast('내보내기에 실패했습니다. 다시 시도해 주세요.');}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.getElementById('exportOverlay'))closeExport();});
