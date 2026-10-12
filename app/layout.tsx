@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "플랜티넷 그룹 · 인원현황 보고",
+  title: "플랜티그룹 · 인원현황 보고",
   description: "플랜티넷·플랜티엠 인사현황 대시보드",
   other: {
   },
