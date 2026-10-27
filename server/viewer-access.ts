@@ -1,0 +1,10 @@
+import { env } from 'cloudflare:workers';
+import { getChatGPTUser } from '../app/chatgpt-auth';
+import { isAdminIdentity, PRIVATE_HEADERS } from './admin-policy';
+import { verifyViewerToken, viewerCookie, type GateConfig } from './access-crypto';
+export function database(){if(!env.DB)throw Error('Access settings database is unavailable');return env.DB;}
+export async function getGateConfig(){return await database().prepare("SELECT salt,password_hash,session_key,revision,updated_at FROM access_settings WHERE id = 'viewer'").first<GateConfig>();}
+export async function mayReadReport(request:Request){if(isAdminIdentity(await getChatGPTUser()))return true;const config=await getGateConfig();return !!config&&await verifyViewerToken(viewerCookie(request),config);}
+const esc=(v:string)=>v.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
+export function passwordPage(configured:boolean,message=''){const html=`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#142d35"><title>플랜티그룹 · 접속 암호 확인</title><link rel="stylesheet" href="/style.css"></head><body><div class="access-page"><section class="panel access-panel"><span class="eyebrow">PLANTY GROUP / PEOPLE REPORT</span><h1>플랜티그룹 인원현황</h1><p>${configured?'공유받은 접속 암호를 입력해 주세요.':'관리자가 접속 암호를 설정한 뒤 조회할 수 있습니다.'}</p>${configured?'<form action="/access" method="post"><label for="viewerPassword">접속 암호</label><input id="viewerPassword" name="password" type="password" autocomplete="current-password" required maxlength="128"><button class="button primary" type="submit">보고서 확인</button></form>':''}${message?`<p class="access-error" role="alert">${esc(message)}</p>`:''}<a class="access-admin" href="/admin" target="_top">관리자 로그인</a></section></div></body></html>`;return new Response(html,{headers:{...PRIVATE_HEADERS,'Content-Type':'text/html; charset=utf-8'}});}
+export function sameOrigin(request:Request){return request.headers.get('Origin')===new URL(request.url).origin;}
