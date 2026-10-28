@@ -1,8 +1,21 @@
-import { getChatGPTUser } from '../../../chatgpt-auth';
-import { isAdminIdentity,PRIVATE_HEADERS } from '../../../../server/admin-policy';
-import { database,getGateConfig,sameOrigin } from '../../../../server/viewer-access';
+import { isAdminRequest,getAccessConfig,saveAccessConfig,sameOrigin } from '../../../../server/access-service';
+import { PRIVATE_HEADERS } from '../../../../server/admin-policy';
 import { createGateConfig } from '../../../../server/access-crypto';
-export const dynamic='force-dynamic';
-async function authorized(){return isAdminIdentity(await getChatGPTUser());}
-export async function GET(){if(!await authorized())return Response.json({error:'관리자 권한이 필요합니다.'},{status:403,headers:PRIVATE_HEADERS});const config=await getGateConfig();return Response.json({configured:!!config,updatedAt:config?.updated_at||null},{headers:PRIVATE_HEADERS});}
-export async function POST(request:Request){if(!await authorized()||!sameOrigin(request))return Response.json({error:'관리자 권한이 필요합니다.'},{status:403,headers:PRIVATE_HEADERS});const text=await request.text();if(text.length>2048)return Response.json({error:'입력 내용이 너무 깁니다.'},{status:413,headers:PRIVATE_HEADERS});let password;try{password=JSON.parse(text).password;}catch{return Response.json({error:'입력을 확인하세요.'},{status:400,headers:PRIVATE_HEADERS});}if(typeof password!=='string'||password.trim().length<4||password.length>128)return Response.json({error:'접속 암호는 4~128자로 지정해 주세요.'},{status:400,headers:PRIVATE_HEADERS});const c=await createGateConfig(password);await database().prepare("INSERT INTO access_settings(id,salt,password_hash,session_key,revision,updated_at) VALUES('viewer',?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET salt=excluded.salt,password_hash=excluded.password_hash,session_key=excluded.session_key,revision=excluded.revision,updated_at=excluded.updated_at").bind(c.salt,c.password_hash,c.session_key,c.revision,c.updated_at).run();await database().prepare('DELETE FROM access_attempts').run();return Response.json({configured:true,updatedAt:c.updated_at},{headers:PRIVATE_HEADERS});}
+export const dynamic = 'force-dynamic';
+export async function GET(request: Request) {
+  if (!await isAdminRequest(request)) return Response.json({error:'관리자 로그인이 필요합니다.'},{status:403,headers:PRIVATE_HEADERS});
+  const config = await getAccessConfig('viewer');
+  return Response.json({configured:!!config,updatedAt:config?.updated_at||null},{headers:PRIVATE_HEADERS});
+}
+export async function POST(request: Request) {
+  const json = (value:unknown,status=200) => Response.json(value,{status,headers:PRIVATE_HEADERS});
+  if (!sameOrigin(request)||!await isAdminRequest(request)) return json({error:'관리자 로그인이 필요합니다.'},403);
+  const text = await request.text();
+  if (text.length>2048) return json({error:'입력 내용이 너무 깁니다.'},413);
+  let password:unknown;
+  try { password=JSON.parse(text).password; } catch { return json({error:'입력을 확인해 주세요.'},400); }
+  if (typeof password!=='string'||!/^[0-9]{4}$/.test(password)) return json({error:'사용자 비밀번호는 숫자 4자리로 입력해 주세요.'},400);
+  const config = await createGateConfig(password);
+  await saveAccessConfig('viewer',config);
+  return json({configured:true,updatedAt:config.updated_at});
+}
